@@ -605,6 +605,15 @@
 
     <div class="rsvp-form" id="rsvpForm">
       <div class="form-group">
+        <label>🎉 ¿Podés asistir?</label>
+        <select id="attendance">
+          <option value="">Seleccioná una opción...</option>
+          <option value="Sí, allí estaré!">✅ ¡Sí, allí estaré!</option>
+          <option value="Se me complica, la próxima!">❌ Se me complica, la próxima!</option>
+        </select>
+      </div>
+
+      <div class="form-group">
         <label>👧 Nombre del/la compañerito/a</label>
         <input type="text" id="childName" placeholder="Ej: Valentina" autocomplete="off">
       </div>
@@ -614,28 +623,24 @@
         <input type="text" id="parentName" placeholder="Ej: María García" autocomplete="off">
       </div>
 
-      
+      <div class="form-group">
+        <label>💬 Comentarios o preguntas (opcional)</label>
+        <input type="text" id="comments" placeholder="Ej: Llego 18:30, va con hermanito..." autocomplete="off">
+      </div>
 
-      
-
-      
-
-      <button class="submit-btn" onclick="submitRSVP()">
+      <button type="button" class="submit-btn" onclick="submitRSVP()">
         💜 ¡Confirmar! 💜
       </button>
     </div>
 
     <div class="success-msg" id="successMsg">
       <div class="success-emoji">🎉</div>
-      <div class="success-text">¡Confirmación recibida!</div>
+      <div class="success-text" id="successTitle">¡Confirmación recibida!</div>
       <div class="success-sub" id="successDetail"></div>
-      <button class="submit-btn" style="margin-top:16px;font-size:14px;padding:10px;" onclick="resetForm()">
+      <button type="button" class="submit-btn" style="margin-top:16px;font-size:14px;padding:10px;" onclick="resetForm()">
         Confirmar otro/a compañerito/a
       </button>
     </div>
-  </div>
-
-  
   </div>
 
   <!-- FOOTER -->
@@ -676,76 +681,80 @@
     musicContainer.appendChild(n);
   }
 
-  // === RSVP LOGIC ===
-  let confirmedGuests = [];
-  try {
-    confirmedGuests = JSON.parse(localStorage.getItem('kpop_rsvp_flor') || '[]');
-  } catch(e) {
-    confirmedGuests = [];
-  }
-  
+  // === GOOGLE FORMS RSVP ===
+  const GOOGLE_FORM_URL = 'https://docs.google.com/forms/d/e/1FAIpQLSdRCrxtinKpB_ot_dum4ACZvG549ou99DybrEJ_Qyt3mE7G-w/formResponse';
 
   function submitRSVP() {
+    const attendance = document.getElementById('attendance').value;
     const childName = document.getElementById('childName').value.trim();
     const parentName = document.getElementById('parentName').value.trim();
-    const parentPhone = document.getElementById('parentPhone').value.trim();
-    const attendance = document.getElementById('attendance').value;
-    const allergies = document.getElementById('allergies').value.trim();
+    const comments = document.getElementById('comments').value.trim();
 
+    if (!attendance) { shakeInput('attendance'); return; }
     if (!childName) { shakeInput('childName'); return; }
     if (!parentName) { shakeInput('parentName'); return; }
-    if (!attendance) { shakeInput('attendance'); return; }
 
-    const guest = {
-      childName,
-      parentName,
-      parentPhone,
-      attendance,
-      allergies,
-      timestamp: new Date().toISOString()
-    };
+    // Disable button
+    const btn = document.querySelector('.submit-btn');
+    const originalText = btn.textContent;
+    btn.textContent = '⏳ Enviando...';
+    btn.disabled = true;
 
-    confirmedGuests.push(guest);
-    try {
-      localStorage.setItem('kpop_rsvp_flor', JSON.stringify(confirmedGuests));
-    } catch(e) {}
+    // Build URL with params
+    const params = new URLSearchParams();
+    params.append('entry.877086558', attendance);
+    params.append('entry.1498135098', childName);
+    params.append('entry.986228998', parentName);
+    params.append('entry.2606285', comments);
 
-    document.getElementById('rsvpForm').style.display = 'none';
-    const successMsg = document.getElementById('successMsg');
-    successMsg.classList.add('show');
+    // Send via hidden iframe to avoid redirect
+    const iframe = document.createElement('iframe');
+    iframe.name = 'hidden_iframe';
+    iframe.style.display = 'none';
+    document.body.appendChild(iframe);
 
-    const statusText = '¡' + childName + ' está confirmado/a! 🎉';
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = GOOGLE_FORM_URL;
+    form.target = 'hidden_iframe';
 
-    document.getElementById('successDetail').textContent = statusText;
-    
+    for (const [key, value] of params) {
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = key;
+      input.value = value;
+      form.appendChild(input);
+    }
+
+    document.body.appendChild(form);
+    form.submit();
+
+    // Show success after a short delay
+    setTimeout(function() {
+      document.body.removeChild(form);
+      document.getElementById('rsvpForm').style.display = 'none';
+      document.getElementById('successMsg').classList.add('show');
+
+      if (attendance.indexOf('Sí') !== -1) {
+        document.getElementById('successTitle').textContent = '¡Confirmación recibida!';
+        document.getElementById('successDetail').textContent = '¡' + childName + ' está confirmado/a! Nos vemos en la fiesta 🎤✨';
+      } else {
+        document.getElementById('successTitle').textContent = '¡Respuesta registrada!';
+        document.getElementById('successDetail').textContent = '¡Lástima que ' + childName + ' no pueda venir! La próxima será 💜';
+      }
+    }, 1500);
   }
 
   function resetForm() {
     document.getElementById('rsvpForm').style.display = 'block';
     document.getElementById('successMsg').classList.remove('show');
+    document.getElementById('attendance').value = '';
     document.getElementById('childName').value = '';
     document.getElementById('parentName').value = '';
-  }
-
-  function renderConfirmed() {
-    const list = document.getElementById('confirmedList');
-    const noMsg = document.getElementById('noConfirmed');
-    const confirmed = confirmedGuests.filter(g => g.attendance === 'si');
-
-    list.querySelectorAll('.confirmed-chip').forEach(c => c.remove());
-
-    if (confirmed.length === 0) {
-      noMsg.style.display = 'block';
-      return;
-    }
-
-    noMsg.style.display = 'none';
-    confirmed.forEach((g, i) => {
-      const chip = document.createElement('div');
-      chip.className = 'confirmed-chip';
-      chip.textContent = '⭐ ' + g.childName;
-      list.appendChild(chip);
-    });
+    document.getElementById('comments').value = '';
+    const btn = document.querySelector('.submit-btn');
+    btn.textContent = '💜 ¡Confirmar! 💜';
+    btn.disabled = false;
   }
 
   function shakeInput(id) {
@@ -755,14 +764,10 @@
     el.offsetHeight;
     el.style.animation = 'shake 0.4s ease';
     el.focus();
-    setTimeout(() => { el.style.animation = ''; }, 400);
+    setTimeout(function() { el.style.animation = ''; }, 400);
   }
 </script>
 
-<script>
-  window.formspree = window.formspree || function () { (formspree.q = formspree.q || []).push(arguments); };
-  formspree('initForm', { formElement: '#rsvp-form', formId: 'mreojerr' });
-</script>
-<script src="https://unpkg.com/@formspree/ajax@1" defer></script>
+
 </body>
 </html>
